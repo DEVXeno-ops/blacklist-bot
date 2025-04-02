@@ -51,6 +51,16 @@ client.once('ready', async () => {
       { body: commands }
     );
     logger.info('Slash commands registered successfully!');
+
+    // ตั้งค่าสถานะของ bot
+    client.user.setPresence({
+      status: 'dnd',  // สถานะของ bot (online, idle, dnd, invisible)
+      activities: [{
+        name: 'ใน Discord!', // กิจกรรมที่ bot กำลังทำ (แสดงในสถานะ)
+        type: 'WATCHING',    // ประเภทของกิจกรรม (PLAYING, WATCHING, LISTENING, STREAMING)
+      }],
+    });
+    logger.info('Presence set successfully!');
   } catch (error) {
     logger.error('Error registering slash commands:', error);
   }
@@ -63,8 +73,8 @@ client.on('interactionCreate', async (interaction) => {
   if (!interaction.isCommand()) return;
 
   const { commandName } = interaction;
-
   const command = commands.get(commandName);  // ดึงคำสั่งที่ต้องการจาก Map
+  
   if (!command) return;  // ถ้าไม่พบคำสั่งก็ไม่ทำอะไร
 
   try {
