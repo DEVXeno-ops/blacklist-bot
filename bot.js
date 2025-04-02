@@ -1,6 +1,12 @@
 require('dotenv').config();  // โหลดค่าจาก .env
 const { Client, GatewayIntentBits } = require('discord.js');
+const { REST } = require('@discordjs/rest');
+const { Routes } = require('discord-api-types/v9');
 const winston = require('winston');  // ติดตั้ง winston สำหรับ logging
+const fs = require('fs');
+const path = require('path');
+
+const commands = new Map();
 
 // สร้างตัวจัดการ log ด้วย winston
 const logger = winston.createLogger({
@@ -27,22 +33,46 @@ const client = new Client({
   ]
 });
 
-// เมื่อ bot เข้าสู่ระบบและพร้อมใช้งาน
-client.once('ready', () => {
+// ใช้ token จาก .env เพื่อเข้าสู่ระบบ
+const rest = new REST({ version: '9' }).setToken(process.env.DISCORD_TOKEN);
+
+// โหลดคำสั่งจากโฟลเดอร์ 'commands'
+const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(file => file.endsWith('.js'));
+for (const file of commandFiles) {
+  const command = require(`./commands/${file}`);
+  commands.set(command.data.name, command);  // เพิ่มคำสั่งลงใน Map
+}
+
+// ลงทะเบียนคำสั่ง Slash ในทุกเซิร์ฟเวอร์
+client.once('ready', async () => {
+  try {
+    await rest.put(
+      Routes.applicationCommands(client.user.id),  // ลงทะเบียนคำสั่งในทุกเซิร์ฟเวอร์
+      { body: commands }
+    );
+    logger.info('Slash commands registered successfully!');
+  } catch (error) {
+    logger.error('Error registering slash commands:', error);
+  }
+
   logger.info('Bot is online!');
+});
+
+// เมื่อผู้ใช้ใช้คำสั่ง Slash
+client.on('interactionCreate', async (interaction) => {
+  if (!interaction.isCommand()) return;
+
+  const { commandName } = interaction;
+
+  const command = commands.get(commandName);  // ดึงคำสั่งที่ต้องการจาก Map
+  if (!command) return;  // ถ้าไม่พบคำสั่งก็ไม่ทำอะไร
 
   try {
-    // ตั้งค่าสถานะของ bot
-    client.user.setPresence({
-      status: 'dnd',  // สถานะของ bot (online, idle, dnd, invisible)
-      activities: [{
-        name: 'ใน Discord!', // กิจกรรมที่ bot กำลังทำ (แสดงในสถานะ)
-        type: 'WATCHING',    // ประเภทของกิจกรรม (PLAYING, WATCHING, LISTENING, STREAMING)
-      }],
-    });
-    logger.info('Presence set successfully!');
+    // เรียกใช้คำสั่ง
+    await command.execute(interaction);
   } catch (error) {
-    logger.error('Error setting bot presence:', error);
+    logger.error(`Error executing slash command: ${commandName}`, error);
+    await interaction.reply('There was an error while executing that command.');
   }
 });
 
