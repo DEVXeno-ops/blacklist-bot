@@ -1,16 +1,16 @@
-require('dotenv').config();  // โหลดค่าจาก .env
-const { Client, GatewayIntentBits } = require('discord.js');
-const { REST } = require('@discordjs/rest');
-const { Routes } = require('discord-api-types/v9');
-const winston = require('winston');  // ติดตั้ง winston สำหรับ logging
-const fs = require('fs');
-const path = require('path');
+require('dotenv').config(); // โหลดค่า .env เพื่อใช้ตัวแปรแวดล้อม
+const { Client, GatewayIntentBits } = require('discord.js'); // โหลด discord.js
+const { REST } = require('@discordjs/rest'); // สำหรับลงทะเบียน Slash Commands
+const { Routes } = require('discord-api-types/v9'); // ใช้ API v9
+const winston = require('winston'); // ใช้ winston สำหรับ logging
+const fs = require('fs'); // ใช้ fs เพื่ออ่านไฟล์
+const path = require('path'); // ใช้ path จัดการ path ของไฟล์
 
-const commands = new Map();
+const commands = new Map(); // เก็บคำสั่งทั้งหมดไว้ใน Map
 
-// สร้างตัวจัดการ log ด้วย winston
+// กำหนดค่าการทำงานของ Logger
 const logger = winston.createLogger({
-  level: 'info',  // ระดับของ log
+  level: 'info', // กำหนดระดับ log
   format: winston.format.combine(
     winston.format.colorize(),
     winston.format.timestamp(),
@@ -19,89 +19,96 @@ const logger = winston.createLogger({
     })
   ),
   transports: [
-    new winston.transports.Console(),  // แสดงผลใน console
-    new winston.transports.File({ filename: 'bot.log' })  // บันทึก log ลงไฟล์
+    new winston.transports.Console(), // แสดง log บน Console
+    new winston.transports.File({ filename: 'bot.log' }) // บันทึก log ลงไฟล์
   ]
 });
 
-// สร้าง client ของ Discord bot
+// สร้าง Client ของ Discord Bot
 const client = new Client({
   intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.Guilds, // ให้บอทเข้าถึงข้อมูลเซิร์ฟเวอร์
+    GatewayIntentBits.GuildMessages, // ให้บอทอ่านข้อความในเซิร์ฟเวอร์
+    GatewayIntentBits.MessageContent, // ให้บอทอ่านข้อความที่ส่งมา
   ]
 });
 
-// ใช้ token จาก .env เพื่อเข้าสู่ระบบ
-const rest = new REST({ version: '9' }).setToken(process.env.DISCORD_TOKEN);
-
-// โหลดคำสั่งจากโฟลเดอร์ 'commands'
-const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(file => file.endsWith('.js'));
-for (const file of commandFiles) {
-  const command = require(`./commands/${file}`);
-  commands.set(command.data.name, command);  // เพิ่มคำสั่งลงใน Map
+// ตรวจสอบว่า DISCORD_TOKEN มีค่าหรือไม่
+if (!process.env.DISCORD_TOKEN) {
+  logger.error('DISCORD_TOKEN is not defined in the environment variables.');
+  process.exit(1); // ปิดโปรแกรมถ้าไม่มี Token
 }
 
-// ลงทะเบียนคำสั่ง Slash ในทุกเซิร์ฟเวอร์
+const rest = new REST({ version: '9' }).setToken(process.env.DISCORD_TOKEN);
+
+// โหลดคำสั่งทั้งหมดจากโฟลเดอร์ commands/
+const commandFiles = fs.readdirSync(path.join(__dirname, 'commands')).filter(file => file.endsWith('.js'));
+for (const file of commandFiles) {
+  try {
+    const command = require(`./commands/${file}`);
+    commands.set(command.data.name, command); // เพิ่มคำสั่งลง Map
+  } catch (error) {
+    logger.error(`Failed to load command ${file}:`, error); // บันทึก log ถ้าโหลดคำสั่งไม่สำเร็จ
+  }
+}
+
+// เมื่อบอทออนไลน์
 client.once('ready', async () => {
   try {
-    await rest.put(
-      Routes.applicationCommands(client.user.id),  // ลงทะเบียนคำสั่งในทุกเซิร์ฟเวอร์
-      { body: commands }
-    );
+    const commandData = Array.from(commands.values()).map(cmd => cmd.data.toJSON());
+    await client.application.commands.set(commandData); // ลงทะเบียน Slash Commands
     logger.info('Slash commands registered successfully!');
 
-    // ตั้งค่าสถานะของ bot
+    // ตั้งค่าสถานะของบอท
     client.user.setPresence({
-      status: 'dnd',  // สถานะของ bot (online, idle, dnd, invisible)
-      activities: [{
-        name: 'ใน Discord!', // กิจกรรมที่ bot กำลังทำ (แสดงในสถานะ)
-        type: 'WATCHING',    // ประเภทของกิจกรรม (PLAYING, WATCHING, LISTENING, STREAMING)
-      }],
+      status: 'dnd', // แสดงสถานะ Do Not Disturb
+      activities: [{ name: 'ใน Discord!', type: 'WATCHING' }], // กำหนดกิจกรรมที่บอทกำลังทำ
     });
     logger.info('Presence set successfully!');
   } catch (error) {
     logger.error('Error registering slash commands:', error);
   }
-
   logger.info('Bot is online!');
 });
 
-// เมื่อผู้ใช้ใช้คำสั่ง Slash
+// ตรวจจับคำสั่งจากผู้ใช้
 client.on('interactionCreate', async (interaction) => {
   if (!interaction.isCommand()) return;
-
   const { commandName } = interaction;
-  const command = commands.get(commandName);  // ดึงคำสั่งที่ต้องการจาก Map
-  
-  if (!command) return;  // ถ้าไม่พบคำสั่งก็ไม่ทำอะไร
+  const command = commands.get(commandName);
+
+  if (!command) {
+    return interaction.reply({ content: 'คำสั่งไม่พบ', ephemeral: true });
+  }
 
   try {
-    // เรียกใช้คำสั่ง
-    await command.execute(interaction);
+    await command.execute(interaction); // ทำคำสั่งที่ผู้ใช้เรียก
   } catch (error) {
     logger.error(`Error executing slash command: ${commandName}`, error);
-    await interaction.reply('There was an error while executing that command.');
+    await interaction.reply({ content: 'เกิดข้อผิดพลาดในการประมวลผลคำสั่ง', ephemeral: true });
   }
 });
 
-// จับข้อผิดพลาดที่เกิดจากการเชื่อมต่อของ bot
+// จัดการข้อผิดพลาดของบอท
 client.on('error', (error) => {
   logger.error('Bot error:', error);
 });
 
-// จับข้อผิดพลาดที่ไม่ได้ถูกจับในส่วนของโค้ด
+// จัดการข้อผิดพลาดร้ายแรง
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught Exception:', error);
+  process.exit(1); // ปิดโปรแกรมทันที
 });
 
-// ใช้ token จาก .env เพื่อเข้าสู่ระบบ
+// เข้าสู่ระบบ Discord ด้วย Token
 client.login(process.env.DISCORD_TOKEN)
   .then(() => logger.info('Bot logged in successfully!'))
-  .catch((error) => logger.error('Login failed:', error));
+  .catch((error) => {
+    logger.error('Login failed:', error);
+    process.exit(1);
+  });
 
-// เพิ่มการป้องกัน rate limiting
+// ตรวจจับ Rate Limit ของ Discord API
 client.on('rateLimit', (info) => {
   logger.warn(`Rate limit hit: ${info.method} ${info.path} ${info.timeout}ms`);
 });

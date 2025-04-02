@@ -1,5 +1,5 @@
-const { SlashCommandBuilder } = require('@discordjs/builders');  // ห้ามลบ
-const { EmbedBuilder } = require('discord.js');  // ใช้ EmbedBuilder แทน MessageEmbed
+const { SlashCommandBuilder } = require('@discordjs/builders');
+const { EmbedBuilder } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -7,31 +7,40 @@ module.exports = {
     .setDescription('แสดงเวลาที่บอททำงาน'),
 
   async execute(interaction) {
-    const uptime = interaction.client.uptime;
+    try {
+      const uptime = interaction.client.uptime;
 
-    // แปลงเวลาเป็นวัน ชั่วโมง นาที วินาที
-    const days = Math.floor(uptime / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((uptime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    const minutes = Math.floor((uptime % (1000 * 60 * 60)) / (1000 * 60));
-    const seconds = Math.floor((uptime % (1000 * 60)) / 1000);
+      if (!uptime) {
+        return interaction.reply({ content: 'บอทยังไม่ได้ทำงานหรือมีข้อผิดพลาดในการดึงข้อมูล uptime!', ephemeral: true });
+      }
 
-    // สร้าง Embed ด้วย EmbedBuilder
-    const embed = new EmbedBuilder()
-      .setColor('#1E90FF')  // ใช้สีฟ้าที่ดูทันสมัย
-      .setTitle('🕰️ **Uptime Information** 🕰️')  // ใช้ไอคอนเพื่อดึงความสนใจ
-      .setDescription(`
-        **⏳ เวลาที่บอททำงาน:**  
-        🗓️ **${days} วัน**  
-        ⏰ **${hours} ชั่วโมง**  
-        ⏲️ **${minutes} นาที**  
-        ⚡ **${seconds} วินาที**  
-      `)  // การจัดข้อความที่เรียบง่ายและสะดุดตา
-      .setFooter({ text: 'ขอบคุณที่ใช้บริการบอทของเรา!' })
-      .setTimestamp()  // แสดงเวลาที่ส่งคำตอบ
-      .setThumbnail('https://i.imgur.com/7Ikh67A.png')  // เพิ่มภาพ thumbnail ที่ดูทันสมัย
-      .setImage('https://i.imgur.com/6uHO41R.png');  // เพิ่มภาพที่ให้ความรู้สึกหรูหรา
+      // แปลงเวลาเป็นวัน ชั่วโมง นาที วินาที
+      const days = Math.floor(uptime / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((uptime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      const minutes = Math.floor((uptime % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((uptime % (1000 * 60)) / 1000);
 
-    // ส่ง Embed ให้กับผู้ใช้งาน
-    await interaction.reply({ embeds: [embed] });
+      // สร้าง Embed ด้วย EmbedBuilder
+      const embed = new EmbedBuilder()
+        .setColor('#1E90FF')
+        .setTitle('🕰️ **Uptime Information** 🕰️')
+        .setDescription(`
+          **⏳ เวลาที่บอททำงาน:**  
+          🗓️ **${days} วัน**  
+          ⏰ **${hours} ชั่วโมง**  
+          ⏲️ **${minutes} นาที**  
+          ⚡ **${seconds} วินาที**  
+        `)
+        .setFooter({ text: 'ขอบคุณที่ใช้บริการบอทของเรา!' })
+        .setTimestamp()
+        .setThumbnail('https://i.imgur.com/7Ikh67A.png')
+        .setImage('https://i.imgur.com/6uHO41R.png');
+
+      // ส่ง Embed ที่เป็นข้อความชั่วคราว (Ephemeral Message)
+      await interaction.reply({ embeds: [embed], ephemeral: true });
+    } catch (error) {
+      console.error('Error executing /uptime:', error);
+      await interaction.reply({ content: 'เกิดข้อผิดพลาดในการดึง uptime!', ephemeral: true });
+    }
   },
 };
